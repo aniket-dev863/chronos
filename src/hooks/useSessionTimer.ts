@@ -73,13 +73,17 @@ export function useSessionTimer() {
   };
 
   const finish = () => {
+    const endedAt = Date.now();
+
     const finalElapsed =
       session.status === "running" && session.startedAt
-        ? session.elapsedMs + (Date.now() - session.startedAt)
+        ? session.elapsedMs + (endedAt - session.startedAt)
         : session.elapsedMs;
 
     const completedSession = {
       activity: session.activity,
+      startedAt: session.startedAt,
+      endedAt,
       durationMs: finalElapsed,
     };
 

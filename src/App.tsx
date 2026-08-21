@@ -1,29 +1,144 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import StartSessionModal from "./components/StartSessionModal";
+
 import { useSessionTimer } from "./hooks/useSessionTimer";
-import { formatDuration } from "./utils/time";
+import { useTodaySessions } from "./hooks/useTodaySessions";
+
+import { initializeDatabase } from "./db/schema";
+import { saveSession } from "./db/sessionRepository";
+
+import { formatDuration, formatMinutes } from "./utils/time";
+
 import "./App.css";
 
 function App() {
   const session = useSessionTimer();
 
+  const { sessions, loading, refresh } = useTodaySessions();
+
   const [showStartModal, setShowStartModal] = useState(false);
+
+  /*
+   * --------------------------------------------------
+   * TODAY'S TOTAL FOCUSED TIME
+   * --------------------------------------------------
+   */
+
+  const totalSeconds = sessions.reduce((total, currentSession) => {
+    return total + currentSession.duration_seconds;
+  }, 0);
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+
+  /*
+   * --------------------------------------------------
+   * ACTIVITY TOTALS
+   *
+   * Store everything in SECONDS first.
+   * We only convert to minutes when displaying.
+   * --------------------------------------------------
+   */
+
+  const activityTotals = sessions.reduce<Record<string, number>>(
+    (totals, currentSession) => {
+      totals[currentSession.activity] =
+        (totals[currentSession.activity] || 0) +
+        currentSession.duration_seconds;
+
+      return totals;
+    },
+    {},
+  );
+
+  /*
+   * --------------------------------------------------
+   * DAILY GOAL
+   * --------------------------------------------------
+   */
+
+  const DAILY_GOAL_MINUTES = 7 * 60 + 30;
+
+  const goalPercentage =
+    DAILY_GOAL_MINUTES > 0
+      ? Math.min((totalMinutes / DAILY_GOAL_MINUTES) * 100, 100)
+      : 0;
+
+  /*
+   * --------------------------------------------------
+   * DATABASE INITIALIZATION
+   * --------------------------------------------------
+   */
+
+  useEffect(() => {
+    initializeDatabase()
+      .then(() => {
+        console.log("Chronos database initialized");
+      })
+      .catch((error) => {
+        console.error("Failed to initialize database:", error);
+      });
+  }, []);
+
+  /*
+   * --------------------------------------------------
+   * START SESSION
+   * --------------------------------------------------
+   */
 
   const handleStartSession = (activity: string) => {
     session.start(activity);
+
     setShowStartModal(false);
   };
 
-  const handleFinishSession = () => {
+  /*
+   * --------------------------------------------------
+   * FINISH SESSION
+   * --------------------------------------------------
+   */
+
+  const handleFinishSession = async () => {
     const completed = session.finish();
 
-    console.log("Completed session:", completed);
+    if (!completed.activity || !completed.startedAt) {
+      return;
+    }
+
+    try {
+      await saveSession({
+        activity: completed.activity,
+
+        started_at: new Date(completed.startedAt).toISOString(),
+
+        ended_at: new Date(completed.endedAt).toISOString(),
+
+        duration_seconds: Math.floor(completed.durationMs / 1000),
+
+        created_at: new Date().toISOString(),
+      });
+
+      /*
+       * Reload today's sessions from SQLite.
+       */
+      await refresh();
+
+      console.log("Session saved successfully ✅");
+    } catch (error) {
+      console.error("Failed to save session ❌", error);
+    }
   };
+
   return (
     <div className="app">
+      {/* ================================================
+          SIDEBAR
+          ================================================ */}
+
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">C</div>
+
           <span>Chronos</span>
         </div>
 
@@ -62,44 +177,81 @@ function App() {
         </div>
       </aside>
 
+      {/* ================================================
+          MAIN
+          ================================================ */}
+
       <main className="main">
+        {/* HEADER */}
+
         <header className="header">
           <div>
             <p className="eyebrow">FRIDAY, AUGUST 21</p>
+
             <h1>Good morning.</h1>
+
             <p className="subtitle">Let's make today count.</p>
           </div>
 
           <div className="header-actions">
             <button className="icon-button">⌘K</button>
+
             <div className="avatar">A</div>
           </div>
         </header>
 
+        {/* ================================================
+            STATS
+            ================================================ */}
+
         <section className="stats-grid">
+          {/* Focused Today */}
+
           <div className="stat-card">
             <span>Focused today</span>
-            <strong>5h 42m</strong>
-            <small>+18% from yesterday</small>
+
+            <strong>{formatMinutes(totalMinutes)}</strong>
+
+            <small>Time tracked in focused sessions</small>
           </div>
+
+          {/* Daily Goal */}
 
           <div className="stat-card">
             <span>Daily goal</span>
+
             <strong>7h 30m</strong>
+
             <div className="progress">
-              <div className="progress-fill" />
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${goalPercentage}%`,
+                }}
+              />
             </div>
-            <small>76% completed</small>
+
+            <small>{Math.round(goalPercentage)}% completed</small>
           </div>
+
+          {/* Current Streak */}
 
           <div className="stat-card">
             <span>Current streak</span>
+
             <strong>12 days</strong>
+
             <small>Keep it going 🔥</small>
           </div>
         </section>
 
+        {/* ================================================
+            CURRENT SESSION + POMODORO
+            ================================================ */}
+
         <section className="content-grid">
+          {/* CURRENT SESSION */}
+
           <div className="card session-card">
             {session.status === "idle" && (
               <>
@@ -173,10 +325,13 @@ function App() {
             )}
           </div>
 
+          {/* POMODORO */}
+
           <div className="card pomodoro-card">
             <div className="card-header">
               <div>
                 <p className="card-label">POMODORO</p>
+
                 <h2>Focus</h2>
               </div>
 
@@ -193,62 +348,119 @@ function App() {
           </div>
         </section>
 
+        {/* ================================================
+            TODAY'S TIME
+            ================================================ */}
+
         <section className="card">
           <div className="card-header">
             <div>
               <p className="card-label">TODAY'S TIME</p>
+
               <h2>Where your time went</h2>
             </div>
           </div>
 
           <div className="activity-list">
-            <ActivityRow name="DSA" time="2h 14m" percentage="72%" />
+            {loading ? (
+              <p className="empty-text">Loading today's sessions...</p>
+            ) : sessions.length === 0 ? (
+              <p className="empty-text">No sessions tracked today.</p>
+            ) : (
+              Object.entries(activityTotals).map(([activity, seconds]) => {
+                /*
+                 * Convert to minutes ONLY for display.
+                 */
 
-            <ActivityRow name="Development" time="1h 48m" percentage="58%" />
+                const minutes = Math.floor(seconds / 60);
 
-            <ActivityRow name="Placement" time="51m" percentage="34%" />
+                /*
+                 * Percentage is calculated using
+                 * seconds so small sessions are
+                 * represented correctly.
+                 */
 
-            <ActivityRow name="Academics" time="42m" percentage="28%" />
+                const percentage =
+                  totalSeconds > 0
+                    ? `${(seconds / totalSeconds) * 100}%`
+                    : "0%";
+
+                return (
+                  <ActivityRow
+                    key={activity}
+                    name={activity}
+                    time={formatMinutes(minutes)}
+                    percentage={percentage}
+                  />
+                );
+              })
+            )}
           </div>
         </section>
 
+        {/* ================================================
+            BOTTOM GRID
+            ================================================ */}
+
         <section className="bottom-grid">
+          {/* COMPUTER ACTIVITY */}
+
           <div className="card">
             <div className="card-header">
               <div>
                 <p className="card-label">COMPUTER ACTIVITY</p>
+
                 <h2>Where your time went</h2>
               </div>
             </div>
 
             <div className="activity-summary">
               <div>
-                <strong>6h 42m</strong>
+                <strong>{formatMinutes(totalMinutes)}</strong>
+
                 <span>Tracked</span>
               </div>
 
               <div>
-                <strong>1h 03m</strong>
+                <strong>0m</strong>
+
                 <span>Untracked</span>
               </div>
 
               <div>
-                <strong>38m</strong>
+                <strong>0m</strong>
+
                 <span>Idle</span>
               </div>
             </div>
           </div>
 
+          {/* DAILY REVIEW */}
+
           <div className="card review-card">
             <p className="card-label">DAILY REVIEW</p>
 
-            <h2>You're doing well.</h2>
+            <h2>
+              {goalPercentage >= 100
+                ? "Goal completed! 🎉"
+                : "You're doing well."}
+            </h2>
 
-            <p>You've completed 76% of today's focused-time goal.</p>
+            <p>
+              You've completed {Math.round(goalPercentage)}% of today's
+              focused-time goal.
+            </p>
 
-            <span className="warning">⚠ 34m untracked time detected</span>
+            <span className="warning">
+              ⚠ Computer activity tracking coming soon
+            </span>
           </div>
         </section>
+
+        {/* ================================================
+            START SESSION MODAL
+            ================================================ */}
+
         {showStartModal && (
           <StartSessionModal
             onStart={handleStartSession}
@@ -259,6 +471,10 @@ function App() {
     </div>
   );
 }
+
+/* ========================================================
+   ACTIVITY ROW
+   ======================================================== */
 
 interface ActivityRowProps {
   name: string;
@@ -271,11 +487,16 @@ function ActivityRow({ name, time, percentage }: ActivityRowProps) {
     <div className="activity-row">
       <div className="activity-name">
         <span>{name}</span>
+
         <strong>{time}</strong>
       </div>
 
       <div className="activity-bar">
-        <div style={{ width: percentage }} />
+        <div
+          style={{
+            width: percentage,
+          }}
+        />
       </div>
     </div>
   );
