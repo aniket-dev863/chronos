@@ -43,3 +43,13 @@ export async function getTodaySessions(): Promise<Session[]> {
     ORDER BY started_at DESC
   `);
 }
+
+export async function getAllSessions(): Promise<Session[]> {
+  const db = await getDatabase();
+
+  return await db.select<Session[]>(`
+    SELECT *
+    FROM sessions
+    ORDER BY started_at DESC
+  `);
+}

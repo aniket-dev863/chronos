@@ -1,18 +1,21 @@
+import { useAllSessions } from "./hooks/useAllSessions";
+import SessionsPage from "./pages/SessionsPage";
 import { useEffect, useState } from "react";
-
 import StartSessionModal from "./components/StartSessionModal";
-
 import { useSessionTimer } from "./hooks/useSessionTimer";
 import { useTodaySessions } from "./hooks/useTodaySessions";
-
 import { initializeDatabase } from "./db/schema";
 import { saveSession } from "./db/sessionRepository";
-
 import { formatDuration, formatMinutes } from "./utils/time";
 
 import "./App.css";
 
 function App() {
+  const [currentPage, setCurrentPage] = useState<"dashboard" | "sessions">(
+    "dashboard",
+  );
+
+  const { sessions: allSessions, loading: sessionsLoading } = useAllSessions();
   const session = useSessionTimer();
 
   const { sessions, loading, refresh } = useTodaySessions();
@@ -143,12 +146,20 @@ function App() {
         </div>
 
         <nav className="navigation">
-          <button className="nav-item active">
+          <button
+            className={`nav-item ${
+              currentPage === "dashboard" ? "active" : ""
+            }`}
+            onClick={() => setCurrentPage("dashboard")}
+          >
             <span>⌂</span>
             Dashboard
           </button>
 
-          <button className="nav-item">
+          <button
+            className={`nav-item ${currentPage === "sessions" ? "active" : ""}`}
+            onClick={() => setCurrentPage("sessions")}
+          >
             <span>◷</span>
             Sessions
           </button>
@@ -182,290 +193,244 @@ function App() {
           ================================================ */}
 
       <main className="main">
-        {/* HEADER */}
-
-        <header className="header">
-          <div>
-            <p className="eyebrow">FRIDAY, AUGUST 21</p>
-
-            <h1>Good morning.</h1>
-
-            <p className="subtitle">Let's make today count.</p>
-          </div>
-
-          <div className="header-actions">
-            <button className="icon-button">⌘K</button>
-
-            <div className="avatar">A</div>
-          </div>
-        </header>
-
-        {/* ================================================
-            STATS
-            ================================================ */}
-
-        <section className="stats-grid">
-          {/* Focused Today */}
-
-          <div className="stat-card">
-            <span>Focused today</span>
-
-            <strong>{formatMinutes(totalMinutes)}</strong>
-
-            <small>Time tracked in focused sessions</small>
-          </div>
-
-          {/* Daily Goal */}
-
-          <div className="stat-card">
-            <span>Daily goal</span>
-
-            <strong>7h 30m</strong>
-
-            <div className="progress">
-              <div
-                className="progress-fill"
-                style={{
-                  width: `${goalPercentage}%`,
-                }}
-              />
-            </div>
-
-            <small>{Math.round(goalPercentage)}% completed</small>
-          </div>
-
-          {/* Current Streak */}
-
-          <div className="stat-card">
-            <span>Current streak</span>
-
-            <strong>12 days</strong>
-
-            <small>Keep it going 🔥</small>
-          </div>
-        </section>
-
-        {/* ================================================
-            CURRENT SESSION + POMODORO
-            ================================================ */}
-
-        <section className="content-grid">
-          {/* CURRENT SESSION */}
-
-          <div className="card session-card">
-            {session.status === "idle" && (
-              <>
-                <div className="card-header">
-                  <div>
-                    <p className="card-label">CURRENT SESSION</p>
-
-                    <h2>No active session</h2>
-                  </div>
-                </div>
-
-                <div className="empty-session">
-                  <p>
-                    Tell Chronos what you're working on and start tracking your
-                    time.
-                  </p>
-
-                  <button
-                    className="primary-button"
-                    onClick={() => setShowStartModal(true)}
-                  >
-                    Start session
-                  </button>
-                </div>
-              </>
-            )}
-
-            {session.status !== "idle" && (
-              <>
-                <div className="card-header">
-                  <div>
-                    <p className="card-label">CURRENT SESSION</p>
-
-                    <h2>{session.activity}</h2>
-                  </div>
-
-                  <span className="status-dot">
-                    ● {session.status === "running" ? "Active" : "Paused"}
-                  </span>
-                </div>
-
-                <div className="session-time">
-                  {formatDuration(session.elapsedMs)}
-                </div>
-
-                <div className="session-actions">
-                  {session.status === "running" ? (
-                    <button
-                      className="secondary-button"
-                      onClick={session.pause}
-                    >
-                      Pause
-                    </button>
-                  ) : (
-                    <button
-                      className="secondary-button"
-                      onClick={session.resume}
-                    >
-                      Resume
-                    </button>
-                  )}
-
-                  <button
-                    className="primary-button"
-                    onClick={handleFinishSession}
-                  >
-                    Finish session
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* POMODORO */}
-
-          <div className="card pomodoro-card">
-            <div className="card-header">
+        {currentPage === "dashboard" ? (
+          <>
+            {/* HEADER */}
+            <header className="header">
               <div>
-                <p className="card-label">POMODORO</p>
-
-                <h2>Focus</h2>
+                <p className="eyebrow">FRIDAY, AUGUST 21</p>
+                <h1>Good morning.</h1>
+                <p className="subtitle">Let's make today count.</p>
               </div>
 
-              <span className="pomodoro-count">3 / 4</span>
-            </div>
-
-            <div className="pomodoro-time">24:37</div>
-
-            <div className="pomodoro-progress">
-              <div />
-            </div>
-
-            <button className="primary-button full">Pause</button>
-          </div>
-        </section>
-
-        {/* ================================================
-            TODAY'S TIME
-            ================================================ */}
-
-        <section className="card">
-          <div className="card-header">
-            <div>
-              <p className="card-label">TODAY'S TIME</p>
-
-              <h2>Where your time went</h2>
-            </div>
-          </div>
-
-          <div className="activity-list">
-            {loading ? (
-              <p className="empty-text">Loading today's sessions...</p>
-            ) : sessions.length === 0 ? (
-              <p className="empty-text">No sessions tracked today.</p>
-            ) : (
-              Object.entries(activityTotals).map(([activity, seconds]) => {
-                /*
-                 * Convert to minutes ONLY for display.
-                 */
-
-                const minutes = Math.floor(seconds / 60);
-
-                /*
-                 * Percentage is calculated using
-                 * seconds so small sessions are
-                 * represented correctly.
-                 */
-
-                const percentage =
-                  totalSeconds > 0
-                    ? `${(seconds / totalSeconds) * 100}%`
-                    : "0%";
-
-                return (
-                  <ActivityRow
-                    key={activity}
-                    name={activity}
-                    time={formatMinutes(minutes)}
-                    percentage={percentage}
-                  />
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        {/* ================================================
-            BOTTOM GRID
-            ================================================ */}
-
-        <section className="bottom-grid">
-          {/* COMPUTER ACTIVITY */}
-
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <p className="card-label">COMPUTER ACTIVITY</p>
-
-                <h2>Where your time went</h2>
+              <div className="header-actions">
+                <button className="icon-button">⌘K</button>
+                <div className="avatar">A</div>
               </div>
-            </div>
+            </header>
 
-            <div className="activity-summary">
-              <div>
+            {/* STATS */}
+            <section className="stats-grid">
+              <div className="stat-card">
+                <span>Focused today</span>
                 <strong>{formatMinutes(totalMinutes)}</strong>
-
-                <span>Tracked</span>
+                <small>Time tracked in focused sessions</small>
               </div>
 
-              <div>
-                <strong>0m</strong>
+              <div className="stat-card">
+                <span>Daily goal</span>
+                <strong>7h 30m</strong>
 
-                <span>Untracked</span>
+                <div className="progress">
+                  <div
+                    className="progress-fill"
+                    style={{
+                      width: `${goalPercentage}%`,
+                    }}
+                  />
+                </div>
+
+                <small>{Math.round(goalPercentage)}% completed</small>
               </div>
 
-              <div>
-                <strong>0m</strong>
-
-                <span>Idle</span>
+              <div className="stat-card">
+                <span>Current streak</span>
+                <strong>12 days</strong>
+                <small>Keep it going 🔥</small>
               </div>
-            </div>
-          </div>
+            </section>
 
-          {/* DAILY REVIEW */}
+            {/* CURRENT SESSION + POMODORO */}
+            <section className="content-grid">
+              {/* CURRENT SESSION */}
+              <div className="card session-card">
+                {session.status === "idle" && (
+                  <>
+                    <div className="card-header">
+                      <div>
+                        <p className="card-label">CURRENT SESSION</p>
+                        <h2>No active session</h2>
+                      </div>
+                    </div>
 
-          <div className="card review-card">
-            <p className="card-label">DAILY REVIEW</p>
+                    <div className="empty-session">
+                      <p>
+                        Tell Chronos what you're working on and start tracking
+                        your time.
+                      </p>
 
-            <h2>
-              {goalPercentage >= 100
-                ? "Goal completed! 🎉"
-                : "You're doing well."}
-            </h2>
+                      <button
+                        className="primary-button"
+                        onClick={() => setShowStartModal(true)}
+                      >
+                        Start session
+                      </button>
+                    </div>
+                  </>
+                )}
 
-            <p>
-              You've completed {Math.round(goalPercentage)}% of today's
-              focused-time goal.
-            </p>
+                {session.status !== "idle" && (
+                  <>
+                    <div className="card-header">
+                      <div>
+                        <p className="card-label">CURRENT SESSION</p>
+                        <h2>{session.activity}</h2>
+                      </div>
 
-            <span className="warning">
-              ⚠ Computer activity tracking coming soon
-            </span>
-          </div>
-        </section>
+                      <span className="status-dot">
+                        ● {session.status === "running" ? "Active" : "Paused"}
+                      </span>
+                    </div>
 
-        {/* ================================================
-            START SESSION MODAL
-            ================================================ */}
+                    <div className="session-time">
+                      {formatDuration(session.elapsedMs)}
+                    </div>
 
-        {showStartModal && (
-          <StartSessionModal
-            onStart={handleStartSession}
-            onClose={() => setShowStartModal(false)}
-          />
+                    <div className="session-actions">
+                      {session.status === "running" ? (
+                        <button
+                          className="secondary-button"
+                          onClick={session.pause}
+                        >
+                          Pause
+                        </button>
+                      ) : (
+                        <button
+                          className="secondary-button"
+                          onClick={session.resume}
+                        >
+                          Resume
+                        </button>
+                      )}
+
+                      <button
+                        className="primary-button"
+                        onClick={handleFinishSession}
+                      >
+                        Finish session
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* POMODORO */}
+              <div className="card pomodoro-card">
+                <div className="card-header">
+                  <div>
+                    <p className="card-label">POMODORO</p>
+                    <h2>Focus</h2>
+                  </div>
+
+                  <span className="pomodoro-count">3 / 4</span>
+                </div>
+
+                <div className="pomodoro-time">24:37</div>
+
+                <div className="pomodoro-progress">
+                  <div />
+                </div>
+
+                <button className="primary-button full">Pause</button>
+              </div>
+            </section>
+
+            {/* TODAY'S TIME */}
+            <section className="card">
+              <div className="card-header">
+                <div>
+                  <p className="card-label">TODAY'S TIME</p>
+                  <h2>Where your time went</h2>
+                </div>
+              </div>
+
+              <div className="activity-list">
+                {loading ? (
+                  <p className="empty-text">Loading today's sessions...</p>
+                ) : sessions.length === 0 ? (
+                  <p className="empty-text">No sessions tracked today.</p>
+                ) : (
+                  Object.entries(activityTotals).map(([activity, seconds]) => {
+                    const minutes = Math.floor(seconds / 60);
+
+                    const percentage =
+                      totalSeconds > 0
+                        ? `${(seconds / totalSeconds) * 100}%`
+                        : "0%";
+
+                    return (
+                      <ActivityRow
+                        key={activity}
+                        name={activity}
+                        time={formatMinutes(minutes)}
+                        percentage={percentage}
+                      />
+                    );
+                  })
+                )}
+              </div>
+            </section>
+
+            {/* BOTTOM GRID */}
+            <section className="bottom-grid">
+              {/* COMPUTER ACTIVITY */}
+              <div className="card">
+                <div className="card-header">
+                  <div>
+                    <p className="card-label">COMPUTER ACTIVITY</p>
+                    <h2>Where your time went</h2>
+                  </div>
+                </div>
+
+                <div className="activity-summary">
+                  <div>
+                    <strong>{formatMinutes(totalMinutes)}</strong>
+                    <span>Tracked</span>
+                  </div>
+
+                  <div>
+                    <strong>0m</strong>
+                    <span>Untracked</span>
+                  </div>
+
+                  <div>
+                    <strong>0m</strong>
+                    <span>Idle</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* DAILY REVIEW */}
+              <div className="card review-card">
+                <p className="card-label">DAILY REVIEW</p>
+
+                <h2>
+                  {goalPercentage >= 100
+                    ? "Goal completed! 🎉"
+                    : "You're doing well."}
+                </h2>
+
+                <p>
+                  You've completed {Math.round(goalPercentage)}% of today's
+                  focused-time goal.
+                </p>
+
+                <span className="warning">
+                  ⚠ Computer activity tracking coming soon
+                </span>
+              </div>
+            </section>
+
+            {/* START SESSION MODAL */}
+            {showStartModal && (
+              <StartSessionModal
+                onStart={handleStartSession}
+                onClose={() => setShowStartModal(false)}
+              />
+            )}
+          </>
+        ) : (
+          <SessionsPage sessions={allSessions} loading={sessionsLoading} />
         )}
       </main>
     </div>
