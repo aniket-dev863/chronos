@@ -53,3 +53,31 @@ export async function getAllSessions(): Promise<Session[]> {
     ORDER BY started_at DESC
   `);
 }
+
+export async function deleteSession(sessionId: number) {
+  const db = await getDatabase();
+
+  await db.execute("DELETE FROM sessions WHERE id = ?", [sessionId]);
+}
+
+export async function updateSession(
+  sessionId: number,
+  session: Omit<Session, "id" | "created_at">,
+) {
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE sessions
+      SET activity = ?, started_at = ?, ended_at = ?, duration_seconds = ?
+      WHERE id = ?
+    `,
+    [
+      session.activity,
+      session.started_at,
+      session.ended_at,
+      session.duration_seconds,
+      sessionId,
+    ],
+  );
+}

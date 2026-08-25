@@ -1,21 +1,39 @@
 import { useAllSessions } from "./hooks/useAllSessions";
 import SessionsPage from "./pages/SessionsPage";
+import PlansPage from "./pages/PlansPage";
 import { useEffect, useState } from "react";
 import StartSessionModal from "./components/StartSessionModal";
 import { useSessionTimer } from "./hooks/useSessionTimer";
 import { useTodaySessions } from "./hooks/useTodaySessions";
+import { useUpcomingPlans } from "./hooks/useUpcomingPlans";
 import { initializeDatabase } from "./db/schema";
-import { saveSession } from "./db/sessionRepository";
+import {
+  deleteSession,
+  saveSession,
+  updateSession,
+  type Session,
+} from "./db/sessionRepository";
 import { formatDuration, formatMinutes } from "./utils/time";
 
 import "./App.css";
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<"dashboard" | "sessions">(
-    "dashboard",
-  );
+  const [currentPage, setCurrentPage] = useState<
+    "dashboard" | "sessions" | "plans"
+  >("dashboard");
 
-  const { sessions: allSessions, loading: sessionsLoading } = useAllSessions();
+  const {
+    sessions: allSessions,
+    loading: sessionsLoading,
+    refresh: refreshAllSessions,
+  } = useAllSessions();
+  const {
+    plans,
+    loading: plansLoading,
+    error: plansError,
+    refresh: refreshPlans,
+    toggleCompleted,
+  } = useUpcomingPlans();
   const session = useSessionTimer();
 
   const { sessions, loading, refresh } = useTodaySessions();
@@ -132,6 +150,19 @@ function App() {
     }
   };
 
+  const handleDeleteSession = async (sessionId: number) => {
+    await deleteSession(sessionId);
+    await Promise.all([refresh(), refreshAllSessions()]);
+  };
+
+  const handleUpdateSession = async (
+    sessionId: number,
+    updatedSession: Omit<Session, "id" | "created_at">,
+  ) => {
+    await updateSession(sessionId, updatedSession);
+    await Promise.all([refresh(), refreshAllSessions()]);
+  };
+
   return (
     <div className="app">
       {/* ================================================
@@ -162,6 +193,14 @@ function App() {
           >
             <span>◷</span>
             Sessions
+          </button>
+
+          <button
+            className={`nav-item ${currentPage === "plans" ? "active" : ""}`}
+            onClick={() => setCurrentPage("plans")}
+          >
+            <span>✓</span>
+            Plans
           </button>
 
           <button className="nav-item">
@@ -429,8 +468,21 @@ function App() {
               />
             )}
           </>
+        ) : currentPage === "sessions" ? (
+          <SessionsPage
+            sessions={allSessions}
+            loading={sessionsLoading}
+            onDeleteSession={handleDeleteSession}
+            onUpdateSession={handleUpdateSession}
+          />
         ) : (
-          <SessionsPage sessions={allSessions} loading={sessionsLoading} />
+          <PlansPage
+            plans={plans}
+            loading={plansLoading}
+            error={plansError}
+            onRefresh={refreshPlans}
+            onToggleCompleted={toggleCompleted}
+          />
         )}
       </main>
     </div>
