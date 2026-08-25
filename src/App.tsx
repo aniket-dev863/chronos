@@ -1,6 +1,7 @@
 import { useAllSessions } from "./hooks/useAllSessions";
 import SessionsPage from "./pages/SessionsPage";
 import PlansPage from "./pages/PlansPage";
+import CalendarPage from "./pages/CalendarPage";
 import { useEffect, useState } from "react";
 import StartSessionModal from "./components/StartSessionModal";
 import { useSessionTimer } from "./hooks/useSessionTimer";
@@ -19,7 +20,7 @@ import "./App.css";
 
 function App() {
   const [currentPage, setCurrentPage] = useState<
-    "dashboard" | "sessions" | "plans"
+    "dashboard" | "sessions" | "plans" | "calendar"
   >("dashboard");
 
   const {
@@ -208,7 +209,10 @@ function App() {
             Pomodoro
           </button>
 
-          <button className="nav-item">
+          <button
+            className={`nav-item ${currentPage === "calendar" ? "active" : ""}`}
+            onClick={() => setCurrentPage("calendar")}
+          >
             <span>▣</span>
             Calendar
           </button>
@@ -475,7 +479,7 @@ function App() {
             onDeleteSession={handleDeleteSession}
             onUpdateSession={handleUpdateSession}
           />
-        ) : (
+        ) : currentPage === "plans" ? (
           <PlansPage
             plans={plans}
             loading={plansLoading}
@@ -483,6 +487,8 @@ function App() {
             onRefresh={refreshPlans}
             onToggleCompleted={toggleCompleted}
           />
+        ) : (
+          <CalendarPage sessions={allSessions} plans={plans} />
         )}
       </main>
     </div>
