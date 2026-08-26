@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  getUpcomingPlans,
+  deletePlan,
+  getAllPlans,
   setPlanCompleted,
-  type Plan,
 } from "../db/planRepository";
+
+import type { Plan } from "../db/planRepository";
 
 export function useUpcomingPlans() {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -13,11 +15,24 @@ export function useUpcomingPlans() {
 
   const refresh = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
-      setPlans(await getUpcomingPlans());
-    } catch (loadError) {
-      console.error("Failed to load upcoming plans:", loadError);
-      setError("Could not load your plans. Please try again.");
+
+      const data = await getAllPlans();
+
+      setPlans(data);
+    } catch (err) {
+      console.error("Failed to load plans:", err);
+
+      // Tauri/SQLite errors aren't always instances of Error.
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : JSON.stringify(err);
+
+      setError(message || "Failed to load plans");
     } finally {
       setLoading(false);
     }
@@ -29,11 +44,52 @@ export function useUpcomingPlans() {
 
   const toggleCompleted = useCallback(
     async (planId: number, completed: boolean) => {
-      await setPlanCompleted(planId, completed);
-      await refresh();
+      try {
+        await setPlanCompleted(planId, completed);
+        await refresh();
+      } catch (err) {
+        console.error("Failed to update plan:", err);
+
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : JSON.stringify(err);
+
+        setError(message || "Failed to update plan");
+      }
     },
     [refresh],
   );
 
-  return { plans, loading, error, refresh, toggleCompleted };
+  const removePlan = useCallback(
+    async (planId: number) => {
+      try {
+        await deletePlan(planId);
+        await refresh();
+      } catch (err) {
+        console.error("Failed to delete plan:", err);
+
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : JSON.stringify(err);
+
+        setError(message || "Failed to delete plan");
+      }
+    },
+    [refresh],
+  );
+
+  return {
+    plans,
+    loading,
+    error,
+    refresh,
+    toggleCompleted,
+    removePlan,
+  };
 }

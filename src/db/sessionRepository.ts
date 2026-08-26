@@ -1,4 +1,5 @@
 import { getDatabase } from "./database";
+import { initializeDatabase } from "./schema";
 
 export interface Session {
   id?: number;
@@ -9,7 +10,15 @@ export interface Session {
   created_at: string;
 }
 
+/*
+ * --------------------------------------------------
+ * SAVE SESSION
+ * --------------------------------------------------
+ */
+
 export async function saveSession(session: Omit<Session, "id">) {
+  await initializeDatabase();
+
   const db = await getDatabase();
 
   await db.execute(
@@ -33,43 +42,77 @@ export async function saveSession(session: Omit<Session, "id">) {
   );
 }
 
+/*
+ * --------------------------------------------------
+ * GET TODAY'S SESSIONS
+ * --------------------------------------------------
+ */
+
 export async function getTodaySessions(): Promise<Session[]> {
+  await initializeDatabase();
+
   const db = await getDatabase();
 
-  return await db.select<Session[]>(`
-    SELECT *
+  return db.select<Session[]>(`
+    SELECT
+      id,
+      activity,
+      started_at,
+      ended_at,
+      duration_seconds,
+      created_at
     FROM sessions
     WHERE date(started_at, 'localtime') = date('now', 'localtime')
     ORDER BY started_at DESC
   `);
 }
 
+/*
+ * --------------------------------------------------
+ * GET ALL SESSIONS
+ * --------------------------------------------------
+ */
+
 export async function getAllSessions(): Promise<Session[]> {
+  await initializeDatabase();
+
   const db = await getDatabase();
 
-  return await db.select<Session[]>(`
-    SELECT *
+  return db.select<Session[]>(`
+    SELECT
+      id,
+      activity,
+      started_at,
+      ended_at,
+      duration_seconds,
+      created_at
     FROM sessions
     ORDER BY started_at DESC
   `);
 }
 
-export async function deleteSession(sessionId: number) {
-  const db = await getDatabase();
-
-  await db.execute("DELETE FROM sessions WHERE id = ?", [sessionId]);
-}
+/*
+ * --------------------------------------------------
+ * UPDATE SESSION
+ * --------------------------------------------------
+ */
 
 export async function updateSession(
   sessionId: number,
   session: Omit<Session, "id" | "created_at">,
 ) {
+  await initializeDatabase();
+
   const db = await getDatabase();
 
   await db.execute(
     `
       UPDATE sessions
-      SET activity = ?, started_at = ?, ended_at = ?, duration_seconds = ?
+      SET
+        activity = ?,
+        started_at = ?,
+        ended_at = ?,
+        duration_seconds = ?
       WHERE id = ?
     `,
     [
@@ -79,5 +122,25 @@ export async function updateSession(
       session.duration_seconds,
       sessionId,
     ],
+  );
+}
+
+/*
+ * --------------------------------------------------
+ * DELETE SESSION
+ * --------------------------------------------------
+ */
+
+export async function deleteSession(sessionId: number) {
+  await initializeDatabase();
+
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      DELETE FROM sessions
+      WHERE id = ?
+    `,
+    [sessionId],
   );
 }

@@ -34,6 +34,7 @@ function App() {
     error: plansError,
     refresh: refreshPlans,
     toggleCompleted,
+    removePlan,
   } = useUpcomingPlans();
   const session = useSessionTimer();
 
@@ -486,6 +487,7 @@ function App() {
             error={plansError}
             onRefresh={refreshPlans}
             onToggleCompleted={toggleCompleted}
+            onDeletePlan={removePlan}
           />
         ) : (
           <CalendarPage sessions={allSessions} plans={plans} />
