@@ -32,6 +32,15 @@ export interface CreatePlanInput {
   estimated_minutes: number;
 }
 
+export interface UpdatePlanInput {
+  title: string;
+  description?: string;
+  planned_for: string;
+  priority: PlanPriority;
+  category: PlanCategory;
+  estimated_minutes: number;
+}
+
 /*
  * --------------------------------------------------
  * CREATE PLAN
@@ -69,6 +78,40 @@ export async function createPlan(input: CreatePlanInput) {
   );
 }
 
+/*
+ * --------------------------------------------------
+ * UPDATE  PLANS
+ * --------------------------------------------------
+ */
+
+export async function updatePlan(planId: number, input: UpdatePlanInput) {
+  await initializeDatabase();
+
+  const db = await getDatabase();
+
+  await db.execute(
+    `
+      UPDATE plans
+      SET
+        title = ?,
+        description = ?,
+        planned_for = ?,
+        priority = ?,
+        category = ?,
+        estimated_minutes = ?
+      WHERE id = ?
+    `,
+    [
+      input.title.trim(),
+      input.description?.trim() || null,
+      input.planned_for,
+      input.priority,
+      input.category,
+      input.estimated_minutes,
+      planId,
+    ],
+  );
+}
 /*
  * --------------------------------------------------
  * GET ALL PLANS
@@ -212,11 +255,15 @@ export async function deletePlan(planId: number) {
 
   const db = await getDatabase();
 
-  await db.execute(
+  console.log("DB DELETE:", planId);
+
+  const result = await db.execute(
     `
       DELETE FROM plans
       WHERE id = ?
     `,
     [planId],
   );
+
+  console.log("DB DELETE RESULT:", result);
 }

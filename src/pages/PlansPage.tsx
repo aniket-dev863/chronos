@@ -7,12 +7,22 @@ import {
   type PlanPriority,
 } from "../db/planRepository";
 
+interface UpdatePlanInput {
+  title: string;
+  description: string;
+  planned_for: string;
+  priority: PlanPriority;
+  category: PlanCategory;
+  estimated_minutes: number;
+}
+
 interface PlansPageProps {
   plans: Plan[];
   loading: boolean;
   error: string | null;
   onRefresh: () => Promise<void>;
   onToggleCompleted: (planId: number, completed: boolean) => Promise<void>;
+  onUpdatePlan: (planId: number, input: UpdatePlanInput) => Promise<void>;
   onDeletePlan: (planId: number) => Promise<void>;
 }
 
@@ -63,6 +73,7 @@ function PlansPage({
   error,
   onRefresh,
   onToggleCompleted,
+  onUpdatePlan,
   onDeletePlan,
 }: PlansPageProps) {
   const [title, setTitle] = useState("");
@@ -78,6 +89,8 @@ function PlansPage({
   const [formError, setFormError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
+
+  const [editingPlanId, setEditingPlanId] = useState<number | null>(null);
 
   const [updatingPlanId, setUpdatingPlanId] = useState<number | null>(null);
 
@@ -110,12 +123,17 @@ function PlansPage({
     .filter((plan) => plan.is_completed === 0)
     .reduce((total, plan) => total + plan.estimated_minutes, 0);
 
+  /*
+   * --------------------------------------------------
+   * CREATE / UPDATE PLAN
+   * --------------------------------------------------
+   */
+
   const handleCreatePlan = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmedTitle = title.trim();
     const trimmedDescription = description.trim();
-
     const parsedMinutes = Number(estimatedMinutes);
 
     if (!trimmedTitle) {
@@ -142,18 +160,28 @@ function PlansPage({
       return;
     }
 
+    const planInput: UpdatePlanInput = {
+      title: trimmedTitle,
+      description: trimmedDescription,
+      planned_for: plannedFor,
+      priority,
+      category,
+      estimated_minutes: Math.floor(parsedMinutes),
+    };
+
+    const wasEditing = editingPlanId !== null;
+
     try {
       setSaving(true);
       setFormError(null);
 
-      await createPlan({
-        title: trimmedTitle,
-        description: trimmedDescription,
-        planned_for: plannedFor,
-        priority,
-        category,
-        estimated_minutes: Math.floor(parsedMinutes),
-      });
+      if (editingPlanId !== null) {
+        await onUpdatePlan(editingPlanId, planInput);
+
+        setEditingPlanId(null);
+      } else {
+        await createPlan(planInput);
+      }
 
       setTitle("");
       setDescription("");
@@ -163,14 +191,67 @@ function PlansPage({
       setEstimatedMinutes("60");
 
       await onRefresh();
-    } catch (createError) {
-      console.error("Failed to create plan:", createError);
+    } catch (planError) {
+      console.error("Failed to save plan:", planError);
 
-      setFormError("Could not save this plan. Please try again.");
+      setFormError(
+        wasEditing
+          ? "Could not update this plan. Please try again."
+          : "Could not save this plan. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
   };
+
+  /*
+   * --------------------------------------------------
+   * START EDITING
+   * --------------------------------------------------
+   */
+
+  const handleEdit = (plan: Plan) => {
+    setEditingPlanId(plan.id);
+
+    setTitle(plan.title);
+    setDescription(plan.description ?? "");
+    setPlannedFor(plan.planned_for);
+    setPriority(plan.priority);
+    setCategory(plan.category);
+    setEstimatedMinutes(String(plan.estimated_minutes));
+
+    setFormError(null);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  /*
+   * --------------------------------------------------
+   * CANCEL EDIT
+   * --------------------------------------------------
+   */
+
+  const handleCancelEdit = () => {
+    setEditingPlanId(null);
+
+    setTitle("");
+    setDescription("");
+    setPlannedFor(getTomorrowDateString());
+    setPriority("medium");
+    setCategory("DSA");
+    setEstimatedMinutes("60");
+
+    setFormError(null);
+  };
+
+  /*
+   * --------------------------------------------------
+   * TOGGLE COMPLETION
+   * --------------------------------------------------
+   */
 
   const handleToggle = async (plan: Plan) => {
     try {
@@ -187,18 +268,26 @@ function PlansPage({
     }
   };
 
+  /*
+   * --------------------------------------------------
+   * DELETE
+   * --------------------------------------------------
+   */
+
   const handleDelete = async (plan: Plan) => {
-    const confirmed = window.confirm(`Delete "${plan.title}"?`);
-
-    if (!confirmed) {
-      return;
-    }
-
     try {
       setDeletingPlanId(plan.id);
       setFormError(null);
 
       await onDeletePlan(plan.id);
+
+      /*
+       * If the user deletes the plan currently
+       * being edited, leave edit mode.
+       */
+      if (editingPlanId === plan.id) {
+        handleCancelEdit();
+      }
     } catch (deleteError) {
       console.error("Failed to delete plan:", deleteError);
 
@@ -219,6 +308,10 @@ function PlansPage({
           <p className="subtitle">Decide what matters before the day begins.</p>
         </div>
       </header>
+
+      {/* -------------------------------------------- */}
+      {/* STATS */}
+      {/* -------------------------------------------- */}
 
       <section className="stats-grid">
         <div className="stat-card">
@@ -247,12 +340,20 @@ function PlansPage({
       </section>
 
       <section className="plans-grid">
+        {/* ------------------------------------------ */}
+        {/* CREATE / EDIT FORM */}
+        {/* ------------------------------------------ */}
+
         <form className="card plan-form" onSubmit={handleCreatePlan}>
           <div className="card-header">
             <div>
-              <p className="card-label">NEW PLAN</p>
+              <p className="card-label">
+                {editingPlanId !== null ? "EDIT PLAN" : "NEW PLAN"}
+              </p>
 
-              <h2>Plan something</h2>
+              <h2>
+                {editingPlanId !== null ? "Edit your plan" : "Plan something"}
+              </h2>
             </div>
           </div>
 
@@ -355,12 +456,37 @@ function PlansPage({
 
           {formError && <p className="form-error">{formError}</p>}
 
-          <button className="primary-button" disabled={saving} type="submit">
-            {saving ? "Saving plan..." : "Add plan"}
-          </button>
+          <div className="plan-form-actions">
+            <button className="primary-button" disabled={saving} type="submit">
+              {saving
+                ? editingPlanId !== null
+                  ? "Saving changes..."
+                  : "Saving plan..."
+                : editingPlanId !== null
+                  ? "Save Changes"
+                  : "Add plan"}
+            </button>
+
+            {editingPlanId !== null && (
+              <button
+                className="secondary-button"
+                disabled={saving}
+                onClick={handleCancelEdit}
+                type="button"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
 
+        {/* ------------------------------------------ */}
+        {/* PLAN LIST */}
+        {/* ------------------------------------------ */}
+
         <section className="card plans-list-card">
+          {/* TODAY */}
+
           <div className="card-header">
             <div>
               <p className="card-label">YOUR PLAN</p>
@@ -384,6 +510,7 @@ function PlansPage({
                   updatingPlanId={updatingPlanId}
                   deletingPlanId={deletingPlanId}
                   onToggle={handleToggle}
+                  onEdit={handleEdit}
                   onDelete={handleDelete}
                 />
               ))}
@@ -391,6 +518,8 @@ function PlansPage({
           )}
 
           <div className="plans-section-divider" />
+
+          {/* UPCOMING */}
 
           <div className="card-header">
             <div>
@@ -413,6 +542,7 @@ function PlansPage({
                   updatingPlanId={updatingPlanId}
                   deletingPlanId={deletingPlanId}
                   onToggle={handleToggle}
+                  onEdit={handleEdit}
                   onDelete={handleDelete}
                 />
               ))}
@@ -420,6 +550,8 @@ function PlansPage({
           )}
 
           <div className="plans-section-divider" />
+
+          {/* COMPLETED */}
 
           <div className="card-header">
             <div>
@@ -442,6 +574,7 @@ function PlansPage({
                   updatingPlanId={updatingPlanId}
                   deletingPlanId={deletingPlanId}
                   onToggle={handleToggle}
+                  onEdit={handleEdit}
                   onDelete={handleDelete}
                 />
               ))}
@@ -453,11 +586,18 @@ function PlansPage({
   );
 }
 
+/*
+ * ==================================================
+ * PLAN ROW
+ * ==================================================
+ */
+
 interface PlanRowProps {
   plan: Plan;
   updatingPlanId: number | null;
   deletingPlanId: number | null;
   onToggle: (plan: Plan) => Promise<void>;
+  onEdit: (plan: Plan) => void;
   onDelete: (plan: Plan) => Promise<void>;
 }
 
@@ -466,11 +606,13 @@ function PlanRow({
   updatingPlanId,
   deletingPlanId,
   onToggle,
+  onEdit,
   onDelete,
 }: PlanRowProps) {
   const completed = plan.is_completed === 1;
 
   const isUpdating = updatingPlanId === plan.id;
+
   const isDeleting = deletingPlanId === plan.id;
 
   return (
@@ -517,13 +659,23 @@ function PlanRow({
         </span>
 
         <button
+          className="edit-plan-button"
+          disabled={isUpdating || isDeleting}
+          onClick={() => onEdit(plan)}
+          type="button"
+          aria-label={`Edit ${plan.title}`}
+        >
+          Edit
+        </button>
+
+        <button
           className="delete-plan-button"
           disabled={isUpdating || isDeleting}
           onClick={() => onDelete(plan)}
           type="button"
           aria-label={`Delete ${plan.title}`}
         >
-          Delete
+          {isDeleting ? "Deleting..." : "Delete"}
         </button>
       </div>
     </div>

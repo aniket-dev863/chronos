@@ -4,9 +4,10 @@ import {
   deletePlan,
   getAllPlans,
   setPlanCompleted,
+  updatePlan,
 } from "../db/planRepository";
 
-import type { Plan } from "../db/planRepository";
+import type { Plan, UpdatePlanInput } from "../db/planRepository";
 
 export function useUpcomingPlans() {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -63,26 +64,44 @@ export function useUpcomingPlans() {
     [refresh],
   );
 
-  const removePlan = useCallback(
-    async (planId: number) => {
+  const editPlan = useCallback(
+    async (planId: number, input: UpdatePlanInput) => {
       try {
-        await deletePlan(planId);
+        await updatePlan(planId, input);
+
         await refresh();
       } catch (err) {
-        console.error("Failed to delete plan:", err);
+        console.error("Failed to update plan:", err);
 
-        const message =
-          err instanceof Error
-            ? err.message
-            : typeof err === "string"
-              ? err
-              : JSON.stringify(err);
+        setError(err instanceof Error ? err.message : "Failed to update plan");
 
-        setError(message || "Failed to delete plan");
+        throw err;
       }
     },
     [refresh],
   );
+
+  const removePlan = useCallback(async (planId: number) => {
+    try {
+      console.log("DELETE: starting", planId);
+
+      await deletePlan(planId);
+
+      console.log("DELETE: database operation completed", planId);
+
+      const updatedPlans = await getAllPlans();
+
+      console.log("DELETE: plans after delete", updatedPlans);
+
+      setPlans(updatedPlans);
+    } catch (err) {
+      console.error("DELETE: failed", err);
+
+      setError(err instanceof Error ? err.message : "Failed to delete plan");
+
+      throw err;
+    }
+  }, []);
 
   return {
     plans,
@@ -90,6 +109,7 @@ export function useUpcomingPlans() {
     error,
     refresh,
     toggleCompleted,
+    editPlan,
     removePlan,
   };
 }

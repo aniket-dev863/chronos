@@ -8,6 +8,7 @@ import { useSessionTimer } from "./hooks/useSessionTimer";
 import { useTodaySessions } from "./hooks/useTodaySessions";
 import { useUpcomingPlans } from "./hooks/useUpcomingPlans";
 import { initializeDatabase } from "./db/schema";
+import PomodoroPage from "./pages/PomodoroPage";
 import {
   deleteSession,
   saveSession,
@@ -20,7 +21,7 @@ import "./App.css";
 
 function App() {
   const [currentPage, setCurrentPage] = useState<
-    "dashboard" | "sessions" | "plans" | "calendar"
+    "dashboard" | "sessions" | "plans" | "pomodoro" | "calendar"
   >("dashboard");
 
   const {
@@ -34,6 +35,7 @@ function App() {
     error: plansError,
     refresh: refreshPlans,
     toggleCompleted,
+    editPlan,
     removePlan,
   } = useUpcomingPlans();
   const session = useSessionTimer();
@@ -205,7 +207,10 @@ function App() {
             Plans
           </button>
 
-          <button className="nav-item">
+          <button
+            className={`nav-item ${currentPage === "pomodoro" ? "active" : ""}`}
+            onClick={() => setCurrentPage("pomodoro")}
+          >
             <span>◉</span>
             Pomodoro
           </button>
@@ -487,7 +492,14 @@ function App() {
             error={plansError}
             onRefresh={refreshPlans}
             onToggleCompleted={toggleCompleted}
+            onUpdatePlan={editPlan}
             onDeletePlan={removePlan}
+          />
+        ) : currentPage === "pomodoro" ? (
+          <PomodoroPage
+            onSessionSaved={async () => {
+              await Promise.all([refresh(), refreshAllSessions()]);
+            }}
           />
         ) : (
           <CalendarPage sessions={allSessions} plans={plans} />
