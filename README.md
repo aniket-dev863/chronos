@@ -274,18 +274,20 @@ Chronos is being developed incrementally.
 - [x] Dynamic dashboard statistics
 - [x] Activity-wise time aggregation
 - [x] Dashboard / Sessions navigation
+- [x] Complete Sessions history page
+- [x] Session deletion & editing
+- [x] Plans & daily tasks with priorities & categories
+- [x] Calendar view & day-by-day session overview
+- [x] Pomodoro timer with drift prevention & partial session persistence
+- [x] Productivity analytics & weekly/monthly trends
+- [x] Dynamic streak calculation from SQLite history
 
 ### 🚧 In Progress
 
-- [ ] Complete Sessions history page
-- [ ] Session deletion
-- [ ] Session editing
-- [ ] Calendar view
-- [ ] Productivity analytics
-- [ ] Weekly/monthly statistics
-- [ ] Configurable daily goals
+- [ ] Configurable daily goals & settings
+- [ ] Notifications & sound alerts
+- [ ] Export productivity data (CSV / JSON)
 - [ ] Real computer activity tracking
-- [ ] Improved Pomodoro functionality
 
 ### 🔮 Future
 

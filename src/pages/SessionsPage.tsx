@@ -53,7 +53,8 @@ function SessionsPage({
   const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
   const [sessionToEdit, setSessionToEdit] = useState<Session | null>(null);
   const [activity, setActivity] = useState("");
-  const [sessionDate, setSessionDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [startedTime, setStartedTime] = useState("");
   const [endedTime, setEndedTime] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -83,7 +84,8 @@ function SessionsPage({
     setFeedback(null);
     setSessionToEdit(session);
     setActivity(session.activity);
-    setSessionDate(toDateInputValue(session.started_at));
+    setStartDate(toDateInputValue(session.started_at));
+    setEndDate(toDateInputValue(session.ended_at));
     setStartedTime(toTimeInputValue(session.started_at));
     setEndedTime(toTimeInputValue(session.ended_at));
   };
@@ -96,10 +98,10 @@ function SessionsPage({
     }
 
     const trimmedActivity = activity.trim();
-    const startedAt = new Date(`${sessionDate}T${startedTime}`);
-    const endedAt = new Date(`${sessionDate}T${endedTime}`);
+    const startedAt = new Date(`${startDate}T${startedTime}`);
+    const endedAt = new Date(`${endDate}T${endedTime}`);
 
-    if (!trimmedActivity || !sessionDate || !startedTime || !endedTime) {
+    if (!trimmedActivity || !startDate || !endDate || !startedTime || !endedTime) {
       setFeedback("Complete every session field before saving.");
       return;
     }
@@ -110,7 +112,7 @@ function SessionsPage({
     }
 
     if (endedAt <= startedAt) {
-      setFeedback("The end time must be later than the start time.");
+      setFeedback("The end date and time must be later than the start date and time.");
       return;
     }
 
@@ -324,18 +326,25 @@ function SessionsPage({
               value={activity}
             />
 
-            <label className="form-label" htmlFor="session-date">
-              Date
-            </label>
-            <input
-              className="text-input"
-              id="session-date"
-              onChange={(event) => setSessionDate(event.target.value)}
-              type="date"
-              value={sessionDate}
-            />
-
             <div className="time-input-grid">
+              <div>
+                <label className="form-label" htmlFor="session-start-date">
+                  Start date
+                </label>
+                <input
+                  className="text-input"
+                  id="session-start-date"
+                  onChange={(event) => {
+                    const newStartDate = event.target.value;
+                    setStartDate(newStartDate);
+                    if (!endDate || endDate < newStartDate) {
+                      setEndDate(newStartDate);
+                    }
+                  }}
+                  type="date"
+                  value={startDate}
+                />
+              </div>
               <div>
                 <label className="form-label" htmlFor="session-start-time">
                   Started at
@@ -346,6 +355,21 @@ function SessionsPage({
                   onChange={(event) => setStartedTime(event.target.value)}
                   type="time"
                   value={startedTime}
+                />
+              </div>
+            </div>
+
+            <div className="time-input-grid">
+              <div>
+                <label className="form-label" htmlFor="session-end-date">
+                  End date
+                </label>
+                <input
+                  className="text-input"
+                  id="session-end-date"
+                  onChange={(event) => setEndDate(event.target.value)}
+                  type="date"
+                  value={endDate}
                 />
               </div>
               <div>

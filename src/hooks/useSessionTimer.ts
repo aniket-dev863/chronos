@@ -6,7 +6,15 @@ interface SessionState {
   status: SessionStatus;
   activity: string | null;
   startedAt: number | null;
+  originalStartedAt: number | null;
   elapsedMs: number;
+}
+
+export interface CompletedSession {
+  activity: string | null;
+  startedAt: number | null;
+  endedAt: number;
+  durationMs: number;
 }
 
 export function useSessionTimer() {
@@ -14,6 +22,7 @@ export function useSessionTimer() {
     status: "idle",
     activity: null,
     startedAt: null,
+    originalStartedAt: null,
     elapsedMs: 0,
   });
 
@@ -37,10 +46,12 @@ export function useSessionTimer() {
       : session.elapsedMs;
 
   const start = (activity: string) => {
+    const now = Date.now();
     setSession({
       status: "running",
       activity,
-      startedAt: Date.now(),
+      startedAt: now,
+      originalStartedAt: now,
       elapsedMs: 0,
     });
   };
@@ -72,7 +83,7 @@ export function useSessionTimer() {
     }));
   };
 
-  const finish = () => {
+  const finish = (): CompletedSession => {
     const endedAt = Date.now();
 
     const finalElapsed =
@@ -80,9 +91,9 @@ export function useSessionTimer() {
         ? session.elapsedMs + (endedAt - session.startedAt)
         : session.elapsedMs;
 
-    const completedSession = {
+    const completedSession: CompletedSession = {
       activity: session.activity,
-      startedAt: session.startedAt,
+      startedAt: session.originalStartedAt ?? session.startedAt,
       endedAt,
       durationMs: finalElapsed,
     };
@@ -91,6 +102,7 @@ export function useSessionTimer() {
       status: "idle",
       activity: null,
       startedAt: null,
+      originalStartedAt: null,
       elapsedMs: 0,
     });
 

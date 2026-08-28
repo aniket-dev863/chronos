@@ -2,6 +2,7 @@ import { useAllSessions } from "./hooks/useAllSessions";
 import SessionsPage from "./pages/SessionsPage";
 import PlansPage from "./pages/PlansPage";
 import CalendarPage from "./pages/CalendarPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import { useEffect, useState } from "react";
 import StartSessionModal from "./components/StartSessionModal";
 import { useSessionTimer } from "./hooks/useSessionTimer";
@@ -16,12 +17,13 @@ import {
   type Session,
 } from "./db/sessionRepository";
 import { formatDuration, formatMinutes } from "./utils/time";
+import { calculateStreaks } from "./utils/analytics";
 
 import "./App.css";
 
 function App() {
   const [currentPage, setCurrentPage] = useState<
-    "dashboard" | "sessions" | "plans" | "pomodoro" | "calendar"
+    "dashboard" | "sessions" | "plans" | "pomodoro" | "calendar" | "analytics"
   >("dashboard");
 
   const {
@@ -43,6 +45,7 @@ function App() {
   const { sessions, loading, refresh } = useTodaySessions();
 
   const [showStartModal, setShowStartModal] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   /*
    * --------------------------------------------------
@@ -75,6 +78,14 @@ function App() {
     },
     {},
   );
+
+  /*
+   * --------------------------------------------------
+   * STREAKS
+   * --------------------------------------------------
+   */
+
+  const { currentStreak, longestStreak } = calculateStreaks(allSessions);
 
   /*
    * --------------------------------------------------
@@ -112,6 +123,7 @@ function App() {
    */
 
   const handleStartSession = (activity: string) => {
+    setSessionError(null);
     session.start(activity);
 
     setShowStartModal(false);
@@ -124,9 +136,11 @@ function App() {
    */
 
   const handleFinishSession = async () => {
+    setSessionError(null);
     const completed = session.finish();
 
     if (!completed.activity || !completed.startedAt) {
+      setSessionError("Could not save session: missing session information.");
       return;
     }
 
@@ -151,6 +165,7 @@ function App() {
       console.log("Session saved successfully ✅");
     } catch (error) {
       console.error("Failed to save session ❌", error);
+      setSessionError("Could not save this session. Please try again.");
     }
   };
 
@@ -223,7 +238,10 @@ function App() {
             Calendar
           </button>
 
-          <button className="nav-item">
+          <button
+            className={`nav-item ${currentPage === "analytics" ? "active" : ""}`}
+            onClick={() => setCurrentPage("analytics")}
+          >
             <span>◒</span>
             Analytics
           </button>
@@ -284,8 +302,16 @@ function App() {
 
               <div className="stat-card">
                 <span>Current streak</span>
-                <strong>12 days</strong>
-                <small>Keep it going 🔥</small>
+                <strong>
+                  {currentStreak} {currentStreak === 1 ? "day" : "days"}
+                </strong>
+                <small>
+                  {currentStreak > 0
+                    ? "Keep it going 🔥"
+                    : longestStreak > 0
+                      ? `Best record: ${longestStreak}d`
+                      : "Start a daily habit"}
+                </small>
               </div>
             </section>
 
@@ -310,7 +336,10 @@ function App() {
 
                       <button
                         className="primary-button"
-                        onClick={() => setShowStartModal(true)}
+                        onClick={() => {
+                          setSessionError(null);
+                          setShowStartModal(true);
+                        }}
                       >
                         Start session
                       </button>
@@ -360,6 +389,12 @@ function App() {
                       </button>
                     </div>
                   </>
+                )}
+
+                {sessionError && (
+                  <p className="form-error" role="status">
+                    {sessionError}
+                  </p>
                 )}
               </div>
 
@@ -501,8 +536,13 @@ function App() {
               await Promise.all([refresh(), refreshAllSessions()]);
             }}
           />
-        ) : (
+        ) : currentPage === "calendar" ? (
           <CalendarPage sessions={allSessions} plans={plans} />
+        ) : (
+          <AnalyticsPage
+            sessions={allSessions}
+            loading={sessionsLoading}
+          />
         )}
       </main>
     </div>

@@ -64,6 +64,76 @@ function PomodoroPage({ onSessionSaved }: PomodoroPageProps) {
    */
   const completionHandled = useRef(false);
 
+  const savePartialFocusSession = async () => {
+    if (mode === "focus" && focusStartedAt) {
+      const durationSeconds = Math.max(
+        0,
+        getModeDuration("focus") - remainingSeconds,
+      );
+
+      if (durationSeconds > 0) {
+        completionHandled.current = true;
+        const endedAt = Date.now();
+
+        try {
+          await saveSession({
+            activity: "Pomodoro Focus",
+
+            started_at: new Date(focusStartedAt).toISOString(),
+
+            ended_at: new Date(endedAt).toISOString(),
+
+            duration_seconds: durationSeconds,
+
+            created_at: new Date().toISOString(),
+          });
+          await onSessionSaved?.();
+          console.log("Partial Pomodoro Focus session saved successfully ✅");
+        } catch (error) {
+          console.error("Failed to save partial Pomodoro session ❌", error);
+        }
+      }
+    }
+  };
+
+  const handleReset = async () => {
+    if (
+      (status === "running" || status === "paused") &&
+      mode === "focus" &&
+      focusStartedAt
+    ) {
+      await savePartialFocusSession();
+    }
+    reset();
+  };
+
+  const handleSkip = async () => {
+    if (
+      (status === "running" || status === "paused") &&
+      mode === "focus" &&
+      focusStartedAt
+    ) {
+      await savePartialFocusSession();
+    }
+    skip();
+  };
+
+  const handleChangeMode = async (
+    newMode: "focus" | "shortBreak" | "longBreak",
+  ) => {
+    if (newMode === mode) {
+      return;
+    }
+    if (
+      (status === "running" || status === "paused") &&
+      mode === "focus" &&
+      focusStartedAt
+    ) {
+      await savePartialFocusSession();
+    }
+    changeMode(newMode);
+  };
+
   /*
    * --------------------------------------------------
    * FOCUS COMPLETION
@@ -91,7 +161,7 @@ function PomodoroPage({ onSessionSaved }: PomodoroPageProps) {
 
       const durationSeconds = Math.max(
         0,
-        Math.floor((endedAt - focusStartedAt) / 1000),
+        getModeDuration("focus") - remainingSeconds,
       );
 
       try {
@@ -119,7 +189,7 @@ function PomodoroPage({ onSessionSaved }: PomodoroPageProps) {
     };
 
     void finishFocusSession();
-  }, [mode, status, remainingSeconds, focusStartedAt, nextSession]);
+  }, [mode, status, remainingSeconds, focusStartedAt, nextSession, onSessionSaved]);
 
   /*
    * Reset the completion guard whenever a new
@@ -161,7 +231,7 @@ function PomodoroPage({ onSessionSaved }: PomodoroPageProps) {
           <div className="pomodoro-mode-tabs">
             <button
               className={mode === "focus" ? "active" : ""}
-              onClick={() => changeMode("focus")}
+              onClick={() => handleChangeMode("focus")}
               type="button"
               disabled={status === "running"}
             >
@@ -170,7 +240,7 @@ function PomodoroPage({ onSessionSaved }: PomodoroPageProps) {
 
             <button
               className={mode === "shortBreak" ? "active" : ""}
-              onClick={() => changeMode("shortBreak")}
+              onClick={() => handleChangeMode("shortBreak")}
               type="button"
               disabled={status === "running"}
             >
@@ -179,7 +249,7 @@ function PomodoroPage({ onSessionSaved }: PomodoroPageProps) {
 
             <button
               className={mode === "longBreak" ? "active" : ""}
-              onClick={() => changeMode("longBreak")}
+              onClick={() => handleChangeMode("longBreak")}
               type="button"
               disabled={status === "running"}
             >
@@ -218,11 +288,19 @@ function PomodoroPage({ onSessionSaved }: PomodoroPageProps) {
               </button>
             )}
 
-            <button className="secondary-button" onClick={reset} type="button">
+            <button
+              className="secondary-button"
+              onClick={handleReset}
+              type="button"
+            >
               Reset
             </button>
 
-            <button className="secondary-button" onClick={skip} type="button">
+            <button
+              className="secondary-button"
+              onClick={handleSkip}
+              type="button"
+            >
               Skip
             </button>
           </div>

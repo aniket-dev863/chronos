@@ -9,6 +9,7 @@ interface PomodoroState {
   remainingSeconds: number;
   completedFocusSessions: number;
   focusStartedAt: number | null;
+  targetEndTime: number | null;
 }
 
 const FOCUS_SECONDS = 25 * 60;
@@ -35,15 +36,20 @@ export function usePomodoro() {
     remainingSeconds: FOCUS_SECONDS,
     completedFocusSessions: 0,
     focusStartedAt: null,
+    targetEndTime: null,
   });
 
   const {
     mode,
     status,
-    remainingSeconds,
     completedFocusSessions,
     focusStartedAt,
   } = pomodoro;
+
+  const remainingSeconds =
+    status === "running" && pomodoro.targetEndTime
+      ? Math.max(0, Math.round((pomodoro.targetEndTime - Date.now()) / 1000))
+      : pomodoro.remainingSeconds;
 
   /*
    * --------------------------------------------------
@@ -56,22 +62,39 @@ export function usePomodoro() {
       return;
     }
 
-    const interval = window.setInterval(() => {
+    const updateTimer = () => {
       setPomodoro((current) => {
-        if (current.remainingSeconds <= 1) {
+        if (current.status !== "running" || !current.targetEndTime) {
+          return current;
+        }
+
+        const secondsLeft = Math.max(
+          0,
+          Math.round((current.targetEndTime - Date.now()) / 1000),
+        );
+
+        if (secondsLeft <= 0) {
           return {
             ...current,
             status: "idle",
             remainingSeconds: 0,
+            targetEndTime: null,
           };
+        }
+
+        if (secondsLeft === current.remainingSeconds) {
+          return current;
         }
 
         return {
           ...current,
-          remainingSeconds: current.remainingSeconds - 1,
+          remainingSeconds: secondsLeft,
         };
       });
-    }, 1000);
+    };
+
+    updateTimer();
+    const interval = window.setInterval(updateTimer, 250);
 
     return () => {
       window.clearInterval(interval);
@@ -85,19 +108,20 @@ export function usePomodoro() {
    */
 
   const start = useCallback(() => {
-    setPomodoro((current) => ({
-      ...current,
-      status: "running",
+    setPomodoro((current) => {
+      const now = Date.now();
+      const targetEndTime = now + current.remainingSeconds * 1000;
 
-      /*
-       * Only record the start time when beginning
-       * a Focus session.
-       */
-      focusStartedAt:
-        current.mode === "focus" && current.focusStartedAt === null
-          ? Date.now()
-          : current.focusStartedAt,
-    }));
+      return {
+        ...current,
+        status: "running",
+        targetEndTime,
+        focusStartedAt:
+          current.mode === "focus" && current.focusStartedAt === null
+            ? now
+            : current.focusStartedAt,
+      };
+    });
   }, []);
 
   /*
@@ -107,10 +131,22 @@ export function usePomodoro() {
    */
 
   const pause = useCallback(() => {
-    setPomodoro((current) => ({
-      ...current,
-      status: "paused",
-    }));
+    setPomodoro((current) => {
+      if (current.status !== "running") {
+        return current;
+      }
+
+      const secondsLeft = current.targetEndTime
+        ? Math.max(0, Math.round((current.targetEndTime - Date.now()) / 1000))
+        : current.remainingSeconds;
+
+      return {
+        ...current,
+        status: "paused",
+        remainingSeconds: secondsLeft,
+        targetEndTime: null,
+      };
+    });
   }, []);
 
   /*
@@ -124,6 +160,7 @@ export function usePomodoro() {
       ...current,
       status: "idle",
       remainingSeconds: getDuration(current.mode),
+      targetEndTime: null,
       focusStartedAt: current.mode === "focus" ? null : current.focusStartedAt,
     }));
   }, []);
@@ -140,6 +177,7 @@ export function usePomodoro() {
       mode: newMode,
       status: "idle",
       remainingSeconds: getDuration(newMode),
+      targetEndTime: null,
       focusStartedAt: null,
     }));
   }, []);
@@ -163,6 +201,7 @@ export function usePomodoro() {
           status: "idle",
           remainingSeconds: getDuration(nextMode),
           completedFocusSessions: completed,
+          targetEndTime: null,
           focusStartedAt: null,
         };
       }
@@ -172,6 +211,7 @@ export function usePomodoro() {
         mode: "focus",
         status: "idle",
         remainingSeconds: FOCUS_SECONDS,
+        targetEndTime: null,
         focusStartedAt: null,
       };
     });
