@@ -3,9 +3,10 @@ import SessionsPage from "./pages/SessionsPage";
 import PlansPage from "./pages/PlansPage";
 import CalendarPage from "./pages/CalendarPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import StartSessionModal from "./components/StartSessionModal";
 import { useSessionTimer } from "./hooks/useSessionTimer";
+import { usePomodoro } from "./hooks/usePomodoro";
 import { useTodaySessions } from "./hooks/useTodaySessions";
 import { useUpcomingPlans } from "./hooks/useUpcomingPlans";
 import { initializeDatabase } from "./db/schema";
@@ -20,6 +21,23 @@ import { formatDuration, formatMinutes } from "./utils/time";
 import { calculateStreaks } from "./utils/analytics";
 
 import "./App.css";
+
+function getPomodoroModeDuration(mode: "focus" | "shortBreak" | "longBreak") {
+  switch (mode) {
+    case "focus":
+      return 25 * 60;
+    case "shortBreak":
+      return 5 * 60;
+    case "longBreak":
+      return 15 * 60;
+  }
+}
+
+function formatPomodoroBadgeTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+}
 
 function App() {
   const [currentPage, setCurrentPage] = useState<
@@ -41,6 +59,144 @@ function App() {
     removePlan,
   } = useUpcomingPlans();
   const session = useSessionTimer();
+
+  /*
+   * --------------------------------------------------
+   * POMODORO TIMER
+   *
+   * Lifted up to App (instead of living inside
+   * PomodoroPage) so it keeps running in memory no
+   * matter which page is currently visible. Previously
+   * usePomodoro() was called inside PomodoroPage, so
+   * navigating to another tab unmounted the component
+   * and wiped all timer state.
+   * --------------------------------------------------
+   */
+  const pomodoro = usePomodoro();
+  const pomodoroCompletionHandled = useRef(false);
+
+  const savePartialPomodoroSession = async () => {
+    if (pomodoro.mode === "focus" && pomodoro.focusStartedAt) {
+      const durationSeconds = Math.max(
+        0,
+        getPomodoroModeDuration("focus") - pomodoro.remainingSeconds,
+      );
+
+      if (durationSeconds > 0) {
+        pomodoroCompletionHandled.current = true;
+        const endedAt = Date.now();
+
+        try {
+          await saveSession({
+            activity: "Pomodoro Focus",
+            started_at: new Date(pomodoro.focusStartedAt).toISOString(),
+            ended_at: new Date(endedAt).toISOString(),
+            duration_seconds: durationSeconds,
+            created_at: new Date().toISOString(),
+          });
+          await Promise.all([refresh(), refreshAllSessions()]);
+        } catch (error) {
+          console.error("Failed to save partial Pomodoro session ❌", error);
+        }
+      }
+    }
+  };
+
+  const handlePomodoroReset = async () => {
+    if (
+      (pomodoro.status === "running" || pomodoro.status === "paused") &&
+      pomodoro.mode === "focus" &&
+      pomodoro.focusStartedAt
+    ) {
+      await savePartialPomodoroSession();
+    }
+    pomodoro.reset();
+  };
+
+  const handlePomodoroSkip = async () => {
+    if (
+      (pomodoro.status === "running" || pomodoro.status === "paused") &&
+      pomodoro.mode === "focus" &&
+      pomodoro.focusStartedAt
+    ) {
+      await savePartialPomodoroSession();
+    }
+    pomodoro.skip();
+  };
+
+  const handlePomodoroChangeMode = async (
+    newMode: "focus" | "shortBreak" | "longBreak",
+  ) => {
+    if (newMode === pomodoro.mode) {
+      return;
+    }
+    if (
+      (pomodoro.status === "running" || pomodoro.status === "paused") &&
+      pomodoro.mode === "focus" &&
+      pomodoro.focusStartedAt
+    ) {
+      await savePartialPomodoroSession();
+    }
+    pomodoro.changeMode(newMode);
+  };
+
+  useEffect(() => {
+    if (
+      pomodoro.mode !== "focus" ||
+      pomodoro.status !== "idle" ||
+      pomodoro.remainingSeconds !== 0 ||
+      !pomodoro.focusStartedAt
+    ) {
+      return;
+    }
+
+    if (pomodoroCompletionHandled.current) {
+      return;
+    }
+
+    pomodoroCompletionHandled.current = true;
+
+    const finishFocusSession = async () => {
+      const endedAt = Date.now();
+      const durationSeconds = Math.max(
+        0,
+        getPomodoroModeDuration("focus") - pomodoro.remainingSeconds,
+      );
+
+      try {
+        await saveSession({
+          activity: "Pomodoro Focus",
+          started_at: new Date(pomodoro.focusStartedAt!).toISOString(),
+          ended_at: new Date(endedAt).toISOString(),
+          duration_seconds: durationSeconds,
+          created_at: new Date().toISOString(),
+        });
+        await Promise.all([refresh(), refreshAllSessions()]);
+      } catch (error) {
+        console.error("Failed to save Pomodoro session ❌", error);
+      } finally {
+        pomodoro.nextSession();
+      }
+    };
+
+    void finishFocusSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pomodoro.mode,
+    pomodoro.status,
+    pomodoro.remainingSeconds,
+    pomodoro.focusStartedAt,
+  ]);
+
+  useEffect(() => {
+    if (
+      pomodoro.mode === "focus" &&
+      pomodoro.status === "running" &&
+      pomodoro.focusStartedAt
+    ) {
+      pomodoroCompletionHandled.current = false;
+    }
+  }, [pomodoro.mode, pomodoro.status, pomodoro.focusStartedAt]);
 
   const { sessions, loading, refresh } = useTodaySessions();
 
@@ -228,6 +384,11 @@ function App() {
           >
             <span>◉</span>
             Pomodoro
+            {pomodoro.status !== "idle" && (
+              <span className="nav-item-badge">
+                {formatPomodoroBadgeTime(pomodoro.remainingSeconds)}
+              </span>
+            )}
           </button>
 
           <button
@@ -532,17 +693,17 @@ function App() {
           />
         ) : currentPage === "pomodoro" ? (
           <PomodoroPage
-            onSessionSaved={async () => {
-              await Promise.all([refresh(), refreshAllSessions()]);
-            }}
+            pomodoro={pomodoro}
+            onStart={pomodoro.start}
+            onPause={pomodoro.pause}
+            onReset={handlePomodoroReset}
+            onSkip={handlePomodoroSkip}
+            onChangeMode={handlePomodoroChangeMode}
           />
         ) : currentPage === "calendar" ? (
           <CalendarPage sessions={allSessions} plans={plans} />
         ) : (
-          <AnalyticsPage
-            sessions={allSessions}
-            loading={sessionsLoading}
-          />
+          <AnalyticsPage sessions={allSessions} loading={sessionsLoading} />
         )}
       </main>
     </div>
