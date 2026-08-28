@@ -1275,7 +1275,9 @@ button {
 .analytics-bar-column .bar-fill {
   width: 100%;
   border-radius: 8px;
-  transition: height 0.3s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.15s;
+  transition:
+    height 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+    background-color 0.15s;
 }
 
 .analytics-bar-column .bar-fill.active {
@@ -1510,3 +1512,105 @@ button {
   color: #1d1d1f;
 }
 
+/* ================================================
+   Replaces the wide bar chart so 30/90-day and All Time
+   ranges never overflow the card width.
+   ================================================ */
+.analytics-heatmap-container {
+  margin-top: 20px;
+  padding: 6px 0 4px;
+}
+
+.analytics-heatmap-scroll {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.analytics-heatmap-weekday-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+  padding-top: 0;
+}
+
+.analytics-heatmap-weekday-labels span {
+  height: 13px;
+  font-size: 9px;
+  line-height: 13px;
+  color: #8b8b91;
+  font-weight: 500;
+}
+
+.analytics-heatmap-grid {
+  display: flex;
+  gap: 3px;
+}
+
+.heatmap-week-column {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.heatmap-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: #ebedf0;
+  position: relative;
+  cursor: default;
+  transition: outline 0.1s;
+}
+
+.heatmap-cell.empty {
+  background: transparent;
+}
+
+.heatmap-cell.level-0 {
+  background: #ebedf0;
+}
+
+.heatmap-cell.level-1 {
+  background: #c6e3c1;
+}
+
+.heatmap-cell.level-2 {
+  background: #8fd48a;
+}
+
+.heatmap-cell.level-3 {
+  background: #4bb64a;
+}
+
+.heatmap-cell.level-4 {
+  background: #1d7a1f;
+}
+
+.heatmap-cell.hovered {
+  outline: 2px solid #1d1d1f;
+  outline-offset: 1px;
+  z-index: 10;
+}
+
+.heatmap-tooltip {
+  bottom: calc(100% + 8px);
+}
+
+.analytics-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: 10px;
+  color: #8b8b91;
+}
+
+.analytics-heatmap-legend .heatmap-cell {
+  width: 11px;
+  height: 11px;
+}

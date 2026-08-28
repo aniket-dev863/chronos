@@ -4,7 +4,20 @@ import { formatMinutes } from "../utils/time";
 import {
   computeAnalytics,
   type AnalyticsTimeRange,
+  type DailyTrendPoint,
 } from "../utils/analytics";
+
+// Number of shaded levels in the heatmap (0 = no activity, 4 = most active)
+const HEATMAP_LEVELS = 4;
+
+function getHeatmapLevel(seconds: number, maxSeconds: number): number {
+  if (seconds <= 0 || maxSeconds <= 0) return 0;
+  const ratio = seconds / maxSeconds;
+  const level = Math.ceil(ratio * HEATMAP_LEVELS);
+  return Math.min(HEATMAP_LEVELS, Math.max(1, level));
+}
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface AnalyticsPageProps {
   sessions: Session[];
@@ -44,11 +57,37 @@ function AnalyticsPage({ sessions, loading }: AnalyticsPageProps) {
     return max > 0 ? max : 3600; // default 1h scale
   }, [dailyTrend]);
 
+  // Group daily points into Sun-Sat week columns (GitHub/LeetCode-style mesh),
+  // padded with nulls so short/long ranges always line up on the correct weekday row.
+  const heatmapWeeks = useMemo(() => {
+    if (dailyTrend.length === 0) return [];
+
+    const firstDay = new Date(`${dailyTrend[0].dateString}T00:00:00`).getDay();
+    const cells: (DailyTrendPoint | null)[] = [
+      ...Array(firstDay).fill(null),
+      ...dailyTrend,
+    ];
+
+    const trailing = cells.length % 7;
+    if (trailing > 0) {
+      cells.push(...Array(7 - trailing).fill(null));
+    }
+
+    const weeks: (DailyTrendPoint | null)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    return weeks;
+  }, [dailyTrend]);
+
   const activeDaysPercentage =
     daysInRange > 0 ? Math.round((activeDaysCount / daysInRange) * 100) : 0;
 
   const totalTimeOfDaySeconds =
-    timeOfDay.morning + timeOfDay.afternoon + timeOfDay.evening + timeOfDay.night;
+    timeOfDay.morning +
+    timeOfDay.afternoon +
+    timeOfDay.evening +
+    timeOfDay.night;
 
   return (
     <div className="analytics-page">
@@ -105,7 +144,8 @@ function AnalyticsPage({ sessions, loading }: AnalyticsPageProps) {
           <span>Total focused time</span>
           <strong>{formatDurationSeconds(totalSeconds)}</strong>
           <small>
-            {totalSessions} {totalSessions === 1 ? "session" : "sessions"} tracked
+            {totalSessions} {totalSessions === 1 ? "session" : "sessions"}{" "}
+            tracked
           </small>
         </div>
 
@@ -118,14 +158,17 @@ function AnalyticsPage({ sessions, loading }: AnalyticsPageProps) {
         <div className="stat-card">
           <span>Active days</span>
           <strong>
-            {activeDaysCount} <span className="stat-denom">/ {daysInRange}</span>
+            {activeDaysCount}{" "}
+            <span className="stat-denom">/ {daysInRange}</span>
           </strong>
           <small>{activeDaysPercentage}% tracking consistency</small>
         </div>
 
         <div className="stat-card">
           <span>Current streak</span>
-          <strong>{currentStreak} {currentStreak === 1 ? "day" : "days"} 🔥</strong>
+          <strong>
+            {currentStreak} {currentStreak === 1 ? "day" : "days"} 🔥
+          </strong>
           <small>
             {longestStreak > 0
               ? `Best record: ${longestStreak} ${longestStreak === 1 ? "day" : "days"}`
@@ -153,53 +196,73 @@ function AnalyticsPage({ sessions, loading }: AnalyticsPageProps) {
         ) : dailyTrend.length === 0 ? (
           <p className="empty-text">No session data recorded in this period.</p>
         ) : (
-          <div className="analytics-bar-chart-container">
-            <div className="analytics-bar-chart">
-              {dailyTrend.map((point, index) => {
-                const heightPercent =
-                  maxDailyDuration > 0
-                    ? Math.max(
-                        point.durationSeconds > 0 ? 8 : 2,
-                        Math.round((point.durationSeconds / maxDailyDuration) * 100),
-                      )
-                    : 2;
+          <div className="analytics-heatmap-container">
+            <div className="analytics-heatmap-scroll">
+              <div className="analytics-heatmap-weekday-labels">
+                {WEEKDAY_LABELS.map((label, i) => (
+                  <span key={label} className={i % 2 === 0 ? "" : "muted"}>
+                    {i % 2 === 0 ? label : ""}
+                  </span>
+                ))}
+              </div>
 
-                const isHovered = hoveredBarIndex === index;
+              <div className="analytics-heatmap-grid">
+                {heatmapWeeks.map((week, weekIndex) => (
+                  <div className="heatmap-week-column" key={weekIndex}>
+                    {week.map((point, dayIndex) => {
+                      if (!point) {
+                        return (
+                          <div
+                            key={`empty-${weekIndex}-${dayIndex}`}
+                            className="heatmap-cell empty"
+                          />
+                        );
+                      }
 
-                return (
-                  <div
-                    key={point.dateString}
-                    className={`analytics-bar-column ${isHovered ? "hovered" : ""}`}
-                    onMouseEnter={() => setHoveredBarIndex(index)}
-                    onMouseLeave={() => setHoveredBarIndex(null)}
-                  >
-                    {/* Tooltip */}
-                    {isHovered && (
-                      <div className="analytics-bar-tooltip">
-                        <p className="tooltip-date">{point.fullDateLabel}</p>
-                        <p className="tooltip-value">
-                          {formatDurationSeconds(point.durationSeconds)}
-                        </p>
-                        <p className="tooltip-sub">
-                          {point.sessionCount}{" "}
-                          {point.sessionCount === 1 ? "session" : "sessions"}
-                        </p>
-                      </div>
-                    )}
+                      const cellIndex = weekIndex * 7 + dayIndex;
+                      const isHovered = hoveredBarIndex === cellIndex;
+                      const level = getHeatmapLevel(
+                        point.durationSeconds,
+                        maxDailyDuration,
+                      );
 
-                    {/* Bar graphic */}
-                    <div className="bar-track">
-                      <div
-                        className={`bar-fill ${point.durationSeconds > 0 ? "active" : "zero"}`}
-                        style={{ height: `${heightPercent}%` }}
-                      />
-                    </div>
-
-                    {/* X-axis label */}
-                    <span className="bar-label">{point.dayLabel}</span>
+                      return (
+                        <div
+                          key={point.dateString}
+                          className={`heatmap-cell level-${level} ${isHovered ? "hovered" : ""}`}
+                          onMouseEnter={() => setHoveredBarIndex(cellIndex)}
+                          onMouseLeave={() => setHoveredBarIndex(null)}
+                        >
+                          {isHovered && (
+                            <div className="analytics-bar-tooltip heatmap-tooltip">
+                              <p className="tooltip-date">
+                                {point.fullDateLabel}
+                              </p>
+                              <p className="tooltip-value">
+                                {formatDurationSeconds(point.durationSeconds)}
+                              </p>
+                              <p className="tooltip-sub">
+                                {point.sessionCount}{" "}
+                                {point.sessionCount === 1
+                                  ? "session"
+                                  : "sessions"}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            </div>
+
+            <div className="analytics-heatmap-legend">
+              <span>Less</span>
+              {Array.from({ length: HEATMAP_LEVELS + 1 }, (_, level) => (
+                <div key={level} className={`heatmap-cell level-${level}`} />
+              ))}
+              <span>More</span>
             </div>
           </div>
         )}
@@ -237,7 +300,9 @@ function AnalyticsPage({ sessions, loading }: AnalyticsPageProps) {
                       </span>
                     </div>
                     <div className="analytics-activity-values">
-                      <strong>{formatDurationSeconds(stat.totalSeconds)}</strong>
+                      <strong>
+                        {formatDurationSeconds(stat.totalSeconds)}
+                      </strong>
                       <span className="analytics-percent">
                         {Math.round(stat.percentage)}%
                       </span>
